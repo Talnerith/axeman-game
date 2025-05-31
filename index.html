@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Axe Warrior: Wall Defense</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background-color: #1a202c; /* Tailwind gray-900 */
+            color: #e2e8f0; /* Tailwind slate-200 */
+            margin: 0;
+            overflow: hidden;
+            /* Prevent text selection on touch controls */
+            user-select: none;
+            -webkit-user-select: none;
+            -ms-user-select: none;
+            -moz-user-select: none;
+        }
+        #gameContainer {
+            background-color: #2d3748; /* Tailwind gray-800 */
+            border-radius: 0.5rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative; /* For positioning touch controls */
+        }
+        canvas {
+            display: block;
+            border-radius: 0.375rem;
+            max-width: 100%;
+            image-rendering: pixelated;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: crisp-edges;
+        }
+        .game-ui {
+            display: flex;
+            justify-content: space-between;
+            align-items: center; 
+            width: 100%;
+            padding: 0.5rem 0;
+            font-size: 1.125rem; 
+        }
+        .volume-control {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem; 
+        }
+        input[type="range"] { 
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100px; 
+            height: 8px;
+            background: #4a5568; 
+            border-radius: 5px;
+            outline: none;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            background: #4299e1; 
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        input[type="range"]::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            background: #4299e1; 
+            border-radius: 50%;
+            cursor: pointer;
+            border: none;
+        }
+        .button {
+            background-color: #4299e1; 
+            color: white;
+            font-weight: bold;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.375rem;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            border: none;
+            outline: none;
+        }
+        .button:hover {
+            background-color: #3182ce; 
+        }
+        .button:disabled {
+            background-color: #a0aec0; 
+            cursor: not-allowed;
+        }
+        #messageOverlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.7);
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            z-index: 100; 
+        }
+        #messageOverlay h2 {
+            font-size: 2.25rem; 
+            font-weight: bold;
+            margin-bottom: 1rem;
+        }
+        #messageOverlay p {
+            font-size: 1.25rem; 
+            margin-bottom: 1.5rem;
+        }
+        .touch-controls-container {
+            position: absolute;
+            bottom: 10px; 
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: space-between;
+            padding: 0 20px; 
+            box-sizing: border-box;
+            z-index: 50; 
+            pointer-events: none; /* Allow taps to pass through the container */
+        }
+        .touch-button {
+            background-color: rgba(74, 85, 104, 0.6); 
+            color: white;
+            border: 2px solid rgba(226, 232, 240, 0.7); 
+            border-radius: 50%; 
+            width: 60px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem; 
+            font-weight: bold;
+            cursor: pointer;
+            user-select: none; 
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            pointer-events: auto; /* Make buttons themselves interactive */
+        }
+        .touch-button:active { 
+            background-color: rgba(45, 55, 72, 0.8); 
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer" class="w-full max-w-lg"> 
+        <div class="game-ui px-2">
+            <div>Score: <span id="scoreDisplay">0</span></div>
+            <div class="volume-control">
+                <label for="volumeSlider" class="text-sm">Volume:</label>
+                <input type="range" id="volumeSlider" min="0" max="1" step="0.01" value="0.5">
+            </div>
+            <div>Lives: <span id="livesDisplay">3</span></div>
+        </div>
+        <canvas id="gameCanvas"></canvas>
+        <div class="touch-controls-container">
+            <div id="touchLeft" class="touch-button">&larr;</div> 
+            <div id="touchRight" class="touch-button">&rarr;</div> 
+        </div>
+    </div>
+
+    <div id="messageOverlay" class="hidden">
+        <h2 id="messageTitle">Loading Assets...</h2>
+        <p id="messageText">Please wait.</p>
+        <button id="actionButton" class="button" disabled>Loading...</button>
+    </div>
+
+    <audio id="backgroundMusic" loop src="https://www.dropbox.com/scl/fi/s7xe9xlld3trbc36emmrm/background.mp3?rlkey=ryyhkx9z44zcbo781h6to1ley&st=5lfhkysv&dl=1"></audio>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreDisplay = document.getElementById('scoreDisplay');
+        const livesDisplay = document.getElementById('livesDisplay');
+        const volumeSlider = document.getElementById('volumeSlider'); 
+        const touchLeftButton = document.getElementById('touchLeft');
+        const touchRightButton = document.getElementById('touchRight');
+
+        const messageOverlay = document.getElementById('messageOverlay');
+        const messageTitle = document.getElementById('messageTitle');
+        const messageText = document.getElementById('messageText');
+        const actionButton = document.getElementById('actionButton');
+        const backgroundMusic = document.getElementById('backgroundMusic'); 
+
+        const heroImage = new Image();
+        const heroSwingImage = new Image();
+        const goblinImage = new Image();
+        const skyImage = new Image();
+        const wallImage = new Image();
+
+        const imageSources = {
+            hero: 'https://i.imgur.com/fqh5KjK.png', 
+            heroSwing: 'https://i.imgur.com/IRRHcoI.png', 
+            goblin: 'https://i.imgur.com/KpPFvAM.png',
+            sky: 'https://i.imgur.com/SDID4Bl.png',
+            wall: 'https://i.imgur.com/zIBm3Vd.png'
+        };
+
+        let imagesLoadedCount = 0;
+        const totalImagesToLoad = Object.keys(imageSources).length;
+        let allImagesLoaded = false;
+
+        function onImageLoad() {
+            imagesLoadedCount++;
+            if (imagesLoadedCount === totalImagesToLoad) {
+                allImagesLoaded = true;
+                console.log("All images loaded successfully.");
+            }
+        }
+
+        function onImageError(e) {
+            console.error("Error loading image:", e.target.src, e);
+            allImagesLoaded = false; 
+            gameState = 'ERROR'; 
+            
+            messageTitle.textContent = "Asset Loading Error";
+            messageText.textContent = `Failed to load: ${e.target.src}. Please check the URL and ensure the image is publicly accessible.`;
+            actionButton.textContent = "Error";
+            actionButton.disabled = true;
+            if(messageOverlay.style.display === 'none') {
+                messageOverlay.style.display = 'flex';
+            }
+        }
+
+        heroImage.onload = onImageLoad;
+        heroSwingImage.onload = onImageLoad;
+        goblinImage.onload = onImageLoad;
+        skyImage.onload = onImageLoad;
+        wallImage.onload = onImageLoad;
+
+        heroImage.onerror = onImageError;
+        heroSwingImage.onerror = onImageError;
+        goblinImage.onerror = onImageError;
+        skyImage.onerror = onImageError;
+        wallImage.onerror = onImageError;
+        
+        heroImage.src = imageSources.hero;
+        heroSwingImage.src = imageSources.heroSwing;
+        goblinImage.src = imageSources.goblin;
+        skyImage.src = imageSources.sky;
+        wallImage.src = imageSources.wall;
+        
+        const SPRITE_SCALE_FACTOR = 0.7; 
+
+        let PLAYER_WIDTH; 
+        let PLAYER_HEIGHT;
+        let HERO_SWING_WIDTH;
+        let HERO_SWING_HEIGHT;
+
+        const PLAYER_SPEED = 5;
+
+        let AXE_COLLISION_WIDTH = 50; 
+        let AXE_COLLISION_HEIGHT = 40; 
+        const AXE_SWING_DURATION = 15; 
+        let AXE_OFFSET_X = 30; 
+        let AXE_OFFSET_Y = 0;  
+
+        let ENEMY_WIDTH;
+        let ENEMY_HEIGHT;
+        const ENEMY_SPAWN_INTERVAL_INITIAL = 120;
+        const ENEMY_SPEED_MIN = 0.8;
+        const ENEMY_SPEED_MAX = 2.0;
+
+        let WALL_TOP_MARGIN; 
+        const WALL_TEXTURE_SOURCE_Y_OFFSET_PIXELS = 170; 
+
+
+        let score;
+        let lives;
+        let player;
+        let enemies = []; 
+        let axe = { isSwinging: false, swingTimer: 0, x: 0, y: 0 }; 
+        let enemySpawnTimer;
+        let enemySpawnIntervalCurrent;
+        let frames;
+        let gameState; 
+        let animationFrameId;
+
+        function updateGameConstantsFromImages() {
+            if (!allImagesLoaded) return;
+
+            PLAYER_WIDTH = heroImage.naturalWidth * SPRITE_SCALE_FACTOR;
+            PLAYER_HEIGHT = heroImage.naturalHeight * SPRITE_SCALE_FACTOR;
+            HERO_SWING_WIDTH = heroSwingImage.naturalWidth * SPRITE_SCALE_FACTOR;
+            HERO_SWING_HEIGHT = heroSwingImage.naturalHeight * SPRITE_SCALE_FACTOR;
+            
+            ENEMY_WIDTH = goblinImage.naturalWidth * SPRITE_SCALE_FACTOR;
+            ENEMY_HEIGHT = goblinImage.naturalHeight * SPRITE_SCALE_FACTOR;
+
+            WALL_TOP_MARGIN = PLAYER_HEIGHT + 10; 
+
+            AXE_COLLISION_WIDTH = HERO_SWING_WIDTH * 0.6; 
+            AXE_COLLISION_HEIGHT = HERO_SWING_HEIGHT * 0.8; 
+            AXE_OFFSET_X = PLAYER_WIDTH * 0.3; 
+
+            console.log("Updated game constants. Player WxH:", PLAYER_WIDTH, "x", PLAYER_HEIGHT);
+        }
+
+        function resizeCanvas() {
+            const gameContainer = document.getElementById('gameContainer');
+            canvas.width = Math.floor(gameContainer.clientWidth - 2 * 16); 
+            canvas.height = Math.min(500, window.innerHeight * 0.7);
+
+            if (allImagesLoaded) { 
+                updateGameConstantsFromImages();
+            }
+
+            if (player) {
+                if (typeof PLAYER_WIDTH !== 'undefined' && typeof WALL_TOP_MARGIN !== 'undefined' && typeof PLAYER_HEIGHT !== 'undefined') {
+                    player.x = Math.max(0, Math.min(canvas.width - PLAYER_WIDTH, player.x)); 
+                    player.y = WALL_TOP_MARGIN - PLAYER_HEIGHT;
+                }
+            } else { 
+                 if (allImagesLoaded) initPlayer(); 
+            }
+        }
+
+        function initPlayer() {
+            if (typeof PLAYER_HEIGHT === 'undefined' || typeof WALL_TOP_MARGIN === 'undefined' || typeof PLAYER_WIDTH === 'undefined') {
+                console.warn("Cannot initPlayer: constants not ready.");
+                return;
+            }
+            player = {
+                y: WALL_TOP_MARGIN - PLAYER_HEIGHT,
+                speed: PLAYER_SPEED,
+                movingLeft: false,
+                movingRight: false
+            };
+             player.x = canvas.width / 2 - PLAYER_WIDTH / 2;
+        }
+
+        function initAxe() { 
+            axe = {
+                isSwinging: false,
+                swingTimer: 0,
+                x: 0, y: 0
+            };
+        }
+
+        function setupGame() {
+            if (!allImagesLoaded || gameState === 'ERROR') {
+                return;
+            }
+            updateGameConstantsFromImages(); 
+
+            if (typeof PLAYER_HEIGHT === 'undefined') { 
+                console.error("Constants not set, cannot start game properly.");
+                showMessageScreen("Error", "Game assets did not initialize correctly.", "Error");
+                return;
+            }
+
+            score = 0;
+            lives = 3;
+            enemies = []; 
+            enemySpawnTimer = 0;
+            enemySpawnIntervalCurrent = ENEMY_SPAWN_INTERVAL_INITIAL;
+            frames = 0;
+
+            if (!player) initPlayer(); 
+            if (player) {
+                 player.x = canvas.width / 2 - PLAYER_WIDTH / 2; 
+                 player.y = WALL_TOP_MARGIN - PLAYER_HEIGHT;
+                 player.movingLeft = false;
+                 player.movingRight = false;
+            } else { 
+                initPlayer();
+            }
+            
+            initAxe(); 
+
+            updateUIDisplay();
+            messageOverlay.style.display = 'none';
+            gameState = 'PLAYING';
+
+            if (backgroundMusic) {
+                backgroundMusic.volume = parseFloat(volumeSlider.value); 
+                backgroundMusic.currentTime = 0; 
+                backgroundMusic.play().catch(error => {
+                    console.warn("Background music autoplay was prevented:", error);
+                });
+            }
+        }
+
+        function showMessageScreen(title, text, buttonText) {
+            messageTitle.textContent = title;
+            messageText.textContent = text;
+            actionButton.textContent = buttonText;
+            messageOverlay.style.display = 'flex';
+            
+            const isErrorOrLoading = title.toLowerCase().includes("error") || title.toLowerCase().includes("loading");
+            actionButton.disabled = isErrorOrLoading || (!allImagesLoaded && !title.toLowerCase().includes("game over"));
+
+            if (title.toLowerCase().includes("loading")) gameState = 'LOADING';
+            else if (title.toLowerCase().includes("error")) gameState = 'ERROR';
+            else if (title.toLowerCase().includes("game over")) gameState = 'GAME_OVER';
+            else gameState = 'PRE_GAME';
+        }
+
+        function updateUIDisplay() {
+            scoreDisplay.textContent = score;
+            livesDisplay.textContent = lives;
+        }
+
+        function updatePlayerMovement() {
+            if (!player) return;
+            if (player.movingLeft) player.x -= player.speed;
+            if (player.movingRight) player.x += player.speed;
+            if (typeof PLAYER_WIDTH !== 'undefined') {
+                player.x = Math.max(0, player.x);
+                player.x = Math.min(canvas.width - PLAYER_WIDTH, player.x);
+            }
+        }
+
+        function drawPlayer() {
+            if (!allImagesLoaded || !player || !axe || typeof PLAYER_WIDTH === 'undefined' || typeof HERO_SWING_WIDTH === 'undefined') return; 
+            
+            let imageToDraw = heroImage;
+            let currentRenderWidth = PLAYER_WIDTH; 
+            let currentRenderHeight = PLAYER_HEIGHT; 
+            let drawX = player.x;
+
+            if (axe.isSwinging) {
+                imageToDraw = heroSwingImage;
+                currentRenderWidth = HERO_SWING_WIDTH;
+                currentRenderHeight = HERO_SWING_HEIGHT;
+                drawX = player.x - (HERO_SWING_WIDTH - PLAYER_WIDTH) / 2;
+            }
+            ctx.drawImage(imageToDraw, drawX, player.y, currentRenderWidth, currentRenderHeight);
+        }
+
+        function updateAxeCollisionBox() {
+            if (!axe || !player || typeof PLAYER_WIDTH === 'undefined' || typeof PLAYER_HEIGHT === 'undefined' || typeof AXE_COLLISION_WIDTH === 'undefined') return;
+            if (axe.isSwinging) {
+                const playerCenterX = player.x + PLAYER_WIDTH / 2; 
+                const playerCenterY = player.y + PLAYER_HEIGHT / 2; 
+
+                axe.x = playerCenterX + AXE_OFFSET_X - (AXE_COLLISION_WIDTH / 2);
+                axe.y = playerCenterY + AXE_OFFSET_Y - (AXE_COLLISION_HEIGHT / 2);
+            }
+        }
+
+        function spawnEnemy() {
+             if (typeof ENEMY_WIDTH === 'undefined') return; 
+            const x = Math.random() * (canvas.width - ENEMY_WIDTH);
+            const y = canvas.height; 
+            const speed = ENEMY_SPEED_MIN + Math.random() * (ENEMY_SPEED_MAX - ENEMY_SPEED_MIN);
+            enemies.push({ x: x, y: y, speed: speed });
+        }
+
+        function updateEnemies() {
+            if (typeof ENEMY_HEIGHT === 'undefined' || typeof WALL_TOP_MARGIN === 'undefined' || !enemies ) return;
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                const enemy = enemies[i];
+                enemy.y -= enemy.speed;
+                if (enemy.y + ENEMY_HEIGHT < WALL_TOP_MARGIN) {
+                    enemies.splice(i, 1);
+                    lives--;
+                    updateUIDisplay();
+                    if (lives <= 0) {
+                        gameOver();
+                        return; 
+                    }
+                }
+            }
+        }
+
+        function drawEnemies() {
+            if (!allImagesLoaded || typeof ENEMY_WIDTH === 'undefined' || !enemies) return; 
+            enemies.forEach(enemy => { 
+                ctx.drawImage(goblinImage, enemy.x, enemy.y, ENEMY_WIDTH, ENEMY_HEIGHT);
+            });
+        }
+        
+        function handleAxeSwing() {
+            if (!axe || !axe.isSwinging || typeof AXE_COLLISION_WIDTH === 'undefined' || !enemies || typeof ENEMY_WIDTH === 'undefined') return;
+            axe.swingTimer--;
+            updateAxeCollisionBox(); 
+            if (axe.swingTimer <= 0) {
+                axe.isSwinging = false;
+            } else {
+                const swingRect = { x: axe.x, y: axe.y, width: AXE_COLLISION_WIDTH, height: AXE_COLLISION_HEIGHT };
+                for (let i = enemies.length - 1; i >= 0; i--) {
+                    const enemy = enemies[i];
+                    const enemyRect = { x: enemy.x, y: enemy.y, width: ENEMY_WIDTH, height: ENEMY_HEIGHT };
+                    if (rectCollision(swingRect, enemyRect)) {
+                        enemies.splice(i, 1);
+                        score++;
+                        updateUIDisplay();
+                    }
+                }
+            }
+        }
+
+        function rectCollision(rect1, rect2) {
+            return rect1.x < rect2.x + rect2.width &&
+                   rect1.x + rect1.width > rect2.x &&
+                   rect1.y < rect2.y + rect2.height &&
+                   rect1.y + rect1.height > rect2.y;
+        }
+
+        function playerAttack() {
+            if (!axe || axe.isSwinging || gameState !== 'PLAYING' || !allImagesLoaded) return;
+            axe.isSwinging = true;
+            axe.swingTimer = AXE_SWING_DURATION;
+            updateAxeCollisionBox(); 
+        }
+
+        function updateGameLogic() {
+            if (!allImagesLoaded || gameState !== 'PLAYING') return; 
+            frames++;
+            enemySpawnTimer++;
+            updatePlayerMovement(); 
+            if (enemySpawnTimer >= enemySpawnIntervalCurrent) {
+                spawnEnemy();
+                enemySpawnTimer = 0;
+                if (enemySpawnIntervalCurrent > 45) enemySpawnIntervalCurrent -= 1;
+            }
+            updateEnemies();
+            handleAxeSwing();
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            if (allImagesLoaded && skyImage.complete && skyImage.naturalHeight > 0) {
+                 ctx.drawImage(skyImage, 0, 0, skyImage.naturalWidth, skyImage.naturalHeight, 0, 0, canvas.width, canvas.height);
+            } else if (!allImagesLoaded && gameState === 'LOADING') { 
+                ctx.fillStyle = '#374151'; 
+                ctx.fillRect(0,0, canvas.width, canvas.height);
+            }
+
+            if (allImagesLoaded && wallImage.complete && wallImage.naturalHeight > 0 && typeof WALL_TOP_MARGIN !== 'undefined') {
+                const wallDrawY = WALL_TOP_MARGIN; 
+                const wallDrawHeight = canvas.height - WALL_TOP_MARGIN;
+
+                if (wallDrawHeight > 0) {
+                    const sX = 0;
+                    const sY = WALL_TEXTURE_SOURCE_Y_OFFSET_PIXELS; 
+                    const sWidth = wallImage.naturalWidth;
+                    const sHeight = Math.max(0, wallImage.naturalHeight - sY); 
+
+                    if (sHeight > 0) { 
+                         ctx.drawImage(wallImage,
+                            sX, sY,
+                            sWidth, sHeight,
+                            0, wallDrawY, 
+                            canvas.width, wallDrawHeight);
+                    }
+                }
+            }
+
+            if (gameState === 'ERROR') {
+                ctx.fillStyle = "white";
+                ctx.font = "16px Arial";
+                ctx.textAlign = "center";
+                const errorMsg = messageText.textContent || "An error occurred.";
+                ctx.fillText(errorMsg, canvas.width / 2, canvas.height / 2);
+            } else if (!allImagesLoaded && gameState === 'LOADING') {
+                ctx.fillStyle = "white";
+                ctx.font = "20px Arial";
+                ctx.textAlign = "center";
+                ctx.fillText("Loading images...", canvas.width / 2, canvas.height / 2);
+            } else if (allImagesLoaded && (gameState === 'PLAYING' || gameState === 'PRE_GAME' || gameState === 'GAME_OVER')) {
+                if (typeof ENEMY_WIDTH !== 'undefined') drawEnemies(); 
+                if (typeof PLAYER_WIDTH !== 'undefined') drawPlayer();
+            }
+        }
+
+        function gameLoop() {
+            if (gameState === 'LOADING') {
+                if (allImagesLoaded) {
+                    resizeCanvas(); 
+                    if (typeof PLAYER_HEIGHT !== 'undefined' && typeof axe !== 'undefined') { 
+                         showMessageScreen("Axe Warrior", "Defend the wall! Use Arrow Keys or A/D to move. Space or Tap to attack.", "Start Game");
+                    } else {
+                        console.log("Images loaded, but constants or axe not yet set. Waiting for resize/init.");
+                    }
+                }
+                draw(); 
+            } else if (gameState === 'PRE_GAME' || gameState === 'GAME_OVER' || gameState === 'ERROR') {
+                draw(); 
+            } else if (gameState === 'PLAYING') {
+                updateGameLogic();
+                draw();
+            }
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        function gameOver() {
+            gameState = 'GAME_OVER';
+            if (backgroundMusic) {
+                backgroundMusic.pause();
+            }
+            showMessageScreen("Game Over", `Your final score: ${score}. Well fought!`, "Play Again?");
+        }
+        
+        if (backgroundMusic) {
+            backgroundMusic.volume = parseFloat(volumeSlider.value); 
+        }
+        volumeSlider.addEventListener('input', (e) => {
+            if (backgroundMusic) {
+                backgroundMusic.volume = parseFloat(e.target.value);
+            }
+        });
+
+        window.addEventListener('resize', () => {
+            resizeCanvas(); 
+        });
+
+        // Keyboard movement
+        window.addEventListener('keydown', (e) => {
+            if (gameState === 'PLAYING' && player) { 
+                if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') player.movingLeft = true;
+                else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') player.movingRight = true;
+                else if (e.code === 'Space') {
+                    e.preventDefault(); 
+                    playerAttack();
+                }
+            }
+        });
+        window.addEventListener('keyup', (e) => {
+            if (gameState === 'PLAYING' && player) { 
+                if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') player.movingLeft = false;
+                else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') player.movingRight = false;
+            }
+        });
+
+        // Touch attack (on canvas)
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault(); // Prevent default touch actions like scrolling or zooming on canvas
+
+            // Iterate through all new touch points that started on the canvas
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                const touch = e.changedTouches[i];
+                const touchX = touch.clientX;
+                const touchY = touch.clientY;
+
+                // Get bounding boxes of movement buttons
+                const leftButtonRect = touchLeftButton.getBoundingClientRect();
+                const rightButtonRect = touchRightButton.getBoundingClientRect();
+                const canvasRect = canvas.getBoundingClientRect(); // Get canvas position for accurate check
+
+                // Check if the touch point is within the canvas bounds
+                const isOnCanvas = touchX >= canvasRect.left && touchX <= canvasRect.right &&
+                                 touchY >= canvasRect.top && touchY <= canvasRect.bottom;
+
+                // Check if the touch point is on one of the movement buttons
+                const isOnLeftButton = touchX >= leftButtonRect.left && touchX <= leftButtonRect.right &&
+                                     touchY >= leftButtonRect.top && touchY <= leftButtonRect.bottom;
+                const isOnRightButton = touchX >= rightButtonRect.left && touchX <= rightButtonRect.right &&
+                                      touchY >= rightButtonRect.top && touchY <= rightButtonRect.bottom;
+                
+                // If the touch is on the canvas AND NOT on a movement button, then it's an attack.
+                if (isOnCanvas && !isOnLeftButton && !isOnRightButton) {
+                    if (gameState === 'PLAYING') {
+                        playerAttack();
+                        break; // Attack initiated, no need to check other touch points for this event
+                    }
+                }
+            }
+        }, { passive: false }); 
+
+        // Touch movement (on dedicated buttons)
+        touchLeftButton.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (gameState === 'PLAYING' && player) player.movingLeft = true;
+        }, { passive: false });
+        touchLeftButton.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            if (gameState === 'PLAYING' && player) player.movingLeft = false;
+        });
+        touchLeftButton.addEventListener('touchcancel', (e) => { 
+            e.preventDefault();
+            if (gameState === 'PLAYING' && player) player.movingLeft = false;
+        });
+
+        touchRightButton.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (gameState === 'PLAYING' && player) player.movingRight = true;
+        }, { passive: false });
+        touchRightButton.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            if (gameState === 'PLAYING' && player) player.movingRight = false;
+        });
+        touchRightButton.addEventListener('touchcancel', (e) => {
+            e.preventDefault();
+            if (gameState === 'PLAYING' && player) player.movingRight = false;
+        });
+        
+        touchLeftButton.addEventListener('contextmenu', e => e.preventDefault());
+        touchRightButton.addEventListener('contextmenu', e => e.preventDefault());
+
+        actionButton.addEventListener('click', () => {
+            if (gameState === 'ERROR') return; 
+            if (allImagesLoaded && (gameState === 'PRE_GAME' || gameState === 'GAME_OVER')) {
+                 resizeCanvas(); 
+                 setupGame();
+            }
+        });
+
+        resizeCanvas(); 
+        showMessageScreen("Loading Assets...", "Please wait.", "Loading..."); 
+        gameLoop(); 
+
+    </script>
+</body>
+</html>
